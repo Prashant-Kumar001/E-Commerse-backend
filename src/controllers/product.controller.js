@@ -1,13 +1,9 @@
 import { asyncHandler } from "../middlewares/error.js";
 import Product from "../models/product.js";
-import Order from "../models/order.model.js";
-import User from "../models/user.model.js";
-import AppError from "../utils/appError.js";
+import AppError from "../utils/appError.js"; 
 import { rm } from "fs";
-import { faker } from "@faker-js/faker";
 import { cache } from "../../index.js";
 import { invalidateCache } from "../utils/features.js";
-import mongoose from "mongoose";
 
 const createProduct = asyncHandler(async (req, res) => {
     const { name, price, description, stock, category } = req.body;

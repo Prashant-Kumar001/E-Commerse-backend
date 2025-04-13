@@ -33,7 +33,7 @@ app.use(cors(
   }
 ));
 
-app.use(morgan(NODE_ENV === 'development' ? 'dev' : 'combined'));
+app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 
 
