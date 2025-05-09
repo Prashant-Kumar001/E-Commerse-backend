@@ -8,7 +8,7 @@ const newUser = asyncHandler(async (req, res) => {
 
     const { email, id, username, gender, dob, photo } = req.body;
 
-   
+                                            
     
     if (!id, !username || !email || !gender || !dob || !photo) {
         throw new AppError("all fields are required", status.BAD_REQUEST);
