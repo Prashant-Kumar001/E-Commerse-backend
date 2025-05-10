@@ -6,14 +6,6 @@ import { message, status } from "../utils/constants.js";
 const newUser = asyncHandler(async (req, res) => {
   const { email, id, username, gender, dob, photo } = req.body;
 
-  console.log({
-    email,
-    id,
-    username,
-    gender,
-    dob,
-    photo,
-  })
 
   const userExists = await User.findById(id);
 
