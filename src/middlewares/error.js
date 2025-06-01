@@ -46,7 +46,7 @@ const globalErrorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message,
-    error: NODE_ENV === "development" ? undefined : undefined
+    error: NODE_ENV === "development" ? err : undefined
   });
 };
 

@@ -1,4 +1,4 @@
-import mongoose from "mongoose"; 
+import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
   {
@@ -15,10 +15,16 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: [true, "Please enter product description"],
     },
-    image: {
-      type: String,
-      required: [true, "Please upload product image"],
-    },
+    image: [{
+      secure_url: {
+        type: String,
+        required: [true, "Please enter product image"],
+      },
+      public_id: {
+        type: String,
+        required: [true, "Please enter product image"],
+      },
+    }],
     stock: {
       type: Number,
       required: [true, "Please enter product stock"],
@@ -28,12 +34,18 @@ const productSchema = new mongoose.Schema(
       lowercase: true,
       required: [true, "Please select product category"],
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
+    ratings: {
+      type: Number,
+      default: 0,
     },
-
+    numOfReviews: {
+      type: Number,
+      default: 0,
+    },
   },
+  {
+    timestamps: true,
+  }
 
 );
 

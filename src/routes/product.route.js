@@ -4,26 +4,34 @@ import {
   createProduct,
   getLatestProduct,
   getCategory,
-  getAllProduct,
   getSingleProduct,
   deleteProduct,
   updateProduct,
   getAllSearchProducts,
   getAllProducts,
+  getAllAdminProducts,
+  postReview,
+  deleteReview,
+  getUserReviews,
+  getTopAllReviews
 } from "../controllers/product.controller.js";
 import { AdminOnly } from "../middlewares/Protected.js";
-import { singleUpload } from "../middlewares/multer.js";
+import { multipleUpload } from "../middlewares/multer.js";
 
-router.post("/create", AdminOnly, singleUpload, createProduct);
+router.post("/create", AdminOnly, multipleUpload, createProduct);
 router.get("/latest", getLatestProduct);
 router.get("/category", getCategory);
 router.get("/products", getAllProducts);
-router.get("/all", getAllSearchProducts);
-router.get("/admin-product", AdminOnly, getAllProduct);
+router.get("/all", AdminOnly, getAllAdminProducts);
+router.get("/my", getAllSearchProducts);
+router.get("/reviews", getUserReviews);
+router.get("/top-reviews", getTopAllReviews);
+router.post("/review/new", postReview);
+router.delete("/review/:id", deleteReview);
 router
   .route("/:id")
   .get(getSingleProduct)
-  .put(AdminOnly, singleUpload, updateProduct)
+  .put(AdminOnly, multipleUpload, updateProduct)
   .delete(AdminOnly, deleteProduct);
 
 export default router;

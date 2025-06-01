@@ -10,6 +10,7 @@ export const JWT_EXPIRE = process.env.JWT_EXPIRE;
 export const NODE_ENV = process.env.NODE_ENV;
 export const STRIPE_KEY = process.env.STRIPE_KEY;
 export const SALT_ROUNDS = 10;
+export const REDIS_TTL = process.env.REDIS_TTL
 
 export const message = {
     USER_CREATED: "User created successfully",

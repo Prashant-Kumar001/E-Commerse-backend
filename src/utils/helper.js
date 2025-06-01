@@ -29,8 +29,6 @@ export const calculatePercentage = (thisMonth, lastMonth) => {
   return Number(percent.toFixed(0));
 };
 
-
-
 const getDateRanges = () => {
   const today = new Date();
   const ranges = {

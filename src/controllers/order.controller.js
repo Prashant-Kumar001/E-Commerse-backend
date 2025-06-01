@@ -1,10 +1,11 @@
-import { cache } from "../../index.js";
 import { asyncHandler } from "../middlewares/error.js";
 import Order from "../models/order.model.js";
 import User from "../models/user.model.js";
 import AppError from "../utils/appError.js";
 import { status } from "../utils/constants.js";
 import { decreaseStock, invalidateCache } from "../utils/features.js";
+import { radis } from "../../index.js";
+
 
 export const createOrder = asyncHandler(async (req, res) => {
     const {
@@ -18,6 +19,7 @@ export const createOrder = asyncHandler(async (req, res) => {
         totalPrice,
         discount,
     } = req.body;
+
 
     const missingFields = [];
 
@@ -112,13 +114,14 @@ export const getMyOrders = asyncHandler(async (req, res) => {
         throw new AppError("invalid user id", status.NOT_FOUND);
     }
     const key = `my-orders-${id}`;
-    let orders = [];
+    let orders;
+    orders = await radis.get(key);
 
-    if (cache.has(key)) {
-        orders = JSON.parse(cache.get(key));
+    if (orders) {
+        orders = JSON.parse(orders);
     } else {
         orders = await Order.find({ user: id }).sort({ createdAt: -1 });
-        cache.set(key, JSON.stringify(orders));
+        await radis.set(key, JSON.stringify(orders));
     }
 
     res.status(200).json({
@@ -130,13 +133,13 @@ export const getMyOrders = asyncHandler(async (req, res) => {
 
 export const getAllOrders = asyncHandler(async (req, res) => {
     const key = "all-orders";
-    let allOrders = [];
-
-    if (cache.has(key)) {
-        allOrders = JSON.parse(cache.get(key));
+    let allOrders;
+    allOrders = await radis.get(key);
+    if (allOrders) {
+        allOrders = JSON.parse(allOrders);
     } else {
-        allOrders = await Order.find().populate("user").sort({ createdAt: -1 });
-        cache.set(key, JSON.stringify(allOrders));
+        allOrders = await Order.find().sort({ createdAt: -1 }).populate("user", "username");
+        await radis.set(key, JSON.stringify(allOrders));
     }
 
     res.status(200).json({
@@ -148,27 +151,34 @@ export const getAllOrders = asyncHandler(async (req, res) => {
 
 export const getSingleOrder = asyncHandler(async (req, res) => {
     const { id } = req.params;
+
     const key = `single-order-${id}`;
 
-    let SingleOrder = {};
+    let singleOrder;
+    singleOrder = await radis.get(key);
 
-    if (cache.has(key)) {
-        SingleOrder = JSON.parse(cache.get(key));
+    if (singleOrder) {
+        singleOrder = JSON.parse(singleOrder);
     } else {
-        SingleOrder = await Order.findById(id).populate("user", "username");
+        singleOrder = await Order.findById(id).populate("user", "username");
 
-        if (!SingleOrder) {
+        if (!singleOrder) {
             throw new AppError("order not found", status.NOT_FOUND);
         }
 
-        cache.set(key, JSON.stringify(SingleOrder));
+        await radis.set(key, JSON.stringify(singleOrder));
     }
 
     res.status(200).json({
         success: true,
-        SingleOrder,
+        singleOrder,
     });
 });
+
+
+//upper functions are redis cache enabled
+//lower functions are not redis cache enabled
+
 
 export const processOrder = asyncHandler(async (req, res) => {
     const { id } = req.params;

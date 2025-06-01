@@ -1,36 +1,57 @@
 import { asyncHandler } from "../middlewares/error.js";
 import Product from "../models/product.js";
-import AppError from "../utils/appError.js"; 
+import User from "../models/user.model.js";
+import Review from "../models/review.js";
+import AppError from "../utils/appError.js";
 import { rm } from "fs";
-import { cache } from "../../index.js";
-import { invalidateCache } from "../utils/features.js";
+import {
+    deleteImages,
+    invalidateCache,
+    uploadImages,
+} from "../utils/features.js";
+import { radis } from "../../index.js";
+import { status } from "../utils/constants.js";
 
 const createProduct = asyncHandler(async (req, res) => {
     const { name, price, description, stock, category } = req.body;
 
-
-
-
     if (!name || !price || !description || !stock || !category) {
-        if (req.file) {
-            rm(req.file.path, () => {
-                console.log("File deleted successfully");
+        if (req.files) {
+            req.files.forEach((file) => {
+                rm(file.path, () => {
+                    console.log("File deleted successfully");
+                });
             });
         }
-        throw new AppError("All fields are required", 400);
+
+        throw new AppError("Please fill all the fields", 400);
     }
 
+    const images = req.files;
 
-    const image = req.file;
-    if (!image) {
+    if (!images || images.length === 0) {
         throw new AppError("Please upload an image", 400);
+    }
+
+    const cloudinaryResponse = await uploadImages(images);
+
+    if (cloudinaryResponse) {
+        if (images || images.length > 0) {
+            images.forEach((image) => {
+                rm(image.path, () => {
+                    console.log(
+                        `File ${image.filename} deleted after uploaded on cloudinary from server`
+                    );
+                });
+            });
+        }
     }
 
     const product = new Product({
         name,
         price: Number(price),
         description,
-        image: req.file.path,
+        image: cloudinaryResponse,
         stock,
         category,
     });
@@ -43,16 +64,15 @@ const createProduct = asyncHandler(async (req, res) => {
     await product.save();
     res.status(201).json({ message: "Product created successfully", product });
 });
-
-
 const getLatestProduct = asyncHandler(async (req, res) => {
-    let products = [];
+    let products;
+    products = await radis.get("latestProduct");
 
-    if (cache.has("latestProduct")) {
-        products = JSON.parse(cache.get("latestProduct"));
+    if (!products) {
+        products = await Product.find().sort({ createdAt: -1 }).limit(5);
+        await radis.set("latestProduct", JSON.stringify(products));
     } else {
-         products = await Product.find().sort({ createdAt: -1 }).limit(5);
-        cache.set("latestProduct", JSON.stringify(products));
+        products = JSON.parse(products);
     }
 
     res.status(200).json({
@@ -60,15 +80,15 @@ const getLatestProduct = asyncHandler(async (req, res) => {
         products,
     });
 });
-
-
 const getCategory = asyncHandler(async (req, res) => {
-    let category = [];
-    if (cache.has("category")) {
-        category = JSON.parse(cache.get("category"));
-    } else {
+    let category;
+    category = await radis.get("all-category");
+
+    if (!category) {
         category = await Product.distinct("category");
-        cache.set("category", JSON.stringify(category));
+        await radis.set("all-category", JSON.stringify(category));
+    } else {
+        category = JSON.parse(category);
     }
 
     res.status(200).json({
@@ -76,15 +96,31 @@ const getCategory = asyncHandler(async (req, res) => {
         category,
     });
 });
-
 const getAllProducts = asyncHandler(async (req, res) => {
-    let products = [];
+    let products;
+    products = await radis.get("all-products");
 
-    if (cache.has("all-user-product")) {
-        products = JSON.parse(cache.get("all-user-product"));
+    if (!products) {
+        products = await Product.find().sort({ createdAt: -1 });
+        await radis.set("all-products", JSON.stringify(products));
     } else {
-        products = await Product.find();
-        cache.set("all-product", JSON.stringify(products));
+        products = JSON.parse(products);
+    }
+
+    res.status(200).json({
+        success: true,
+        products,
+    });
+});
+const getAllAdminProducts = asyncHandler(async (req, res) => {
+    let products;
+    products = await radis.get("all-admin-products");
+
+    if (!products) {
+        products = await Product.find().sort({ createdAt: -1 });
+        await radis.set("all-admin-products", JSON.stringify(products));
+    } else {
+        products = JSON.parse(products);
     }
 
     res.status(200).json({
@@ -93,60 +129,73 @@ const getAllProducts = asyncHandler(async (req, res) => {
     });
 });
 
+// upper functions are using Redis for caching
+// lower functions are using MongoDB directly
 
-const getAllProduct = asyncHandler(async (req, res) => {
-    let products = [];
-
-    if (cache.has("all-product")) {
-        products = JSON.parse(cache.get("all-product"));
-    } else {
-        products = await Product.find();
-        cache.set("all-product", JSON.stringify(products));
-    }
-
-    res.status(200).json({
-        success: true,
-        products,
-    });
-});
 
 const getSingleProduct = asyncHandler(async (req, res) => {
+
+    // const cacheKey = `single-product-${req.params.id}`;
+
     const product = await Product.findById(req.params.id);
     if (!product) {
         throw new AppError("Product not found", 404);
     }
+    const reviews = await Review.find({ product: product._id });
+
+    const averageRating =
+        reviews.reduce((acc, review) => acc + review.rating, 0) /
+        (reviews.length || 1);
+    product.ratings = averageRating.toFixed(1);
+    product.numOfReviews = reviews.length;
+    await product.save();
+
+
     res.status(200).json({
         success: true,
         product,
     });
 });
-
 const updateProduct = asyncHandler(async (req, res) => {
     const { name, price, description, stock, category } = req.body;
     const { id } = req.params;
-    const photo = req.file;
-
-
+    const photos = req.files;
 
 
     const product = await Product.findById(id);
     if (!product) {
-        if (photo)
-            rm(photo.path, () => {
-                console.log("File deleted successfully");
+        if (photos && photos.length > 0) {
+            photos.forEach((photo) => {
+                rm(photo.path, () => {
+                    console.log(`Local file ${photo.path} deleted (product not found)`);
+                });
             });
+        }
         throw new AppError("Product not found", 404);
     }
 
-    let fieldsUpdated = [];
+    const fieldsUpdated = [];
 
-    if (photo) {
-        if (product.image) {
-            rm(product.image, () => {
-                console.log("File deleted successfully");
-            });
+    if (photos && photos.length > 0) {
+        const cloudinaryResponse = await uploadImages(photos);
+
+        if (product.image && product.image.length > 0) {
+            const success = await deleteImages(product.image);
+            if (!success) {
+                throw new AppError(
+                    "Error deleting previous images from cloudinary",
+                    500
+                );
+            }
         }
-        product.image = photo.path;
+
+        photos.forEach((photo) => {
+            rm(photo.path, () => {
+                console.log(`Local file ${photo.path} deleted after upload`);
+            });
+        });
+
+        product.image = cloudinaryResponse;
         fieldsUpdated.push("image");
     }
 
@@ -179,26 +228,35 @@ const updateProduct = asyncHandler(async (req, res) => {
         });
     }
 
+    if (fieldsUpdated.length == 0) {
+        return res.status(status.BAD_REQUEST).json({
+            success: false,
+            message: "no field updated",
+            updatedFields: fieldsUpdated,
+        });
+    }
+
+    
+
     res.status(200).json({
         success: true,
-        message:
-            fieldsUpdated.length > 0
-                ? "Product updated successfully"
-                : "No fields updated",
+        message: "Product updated successfully",
         updatedFields: fieldsUpdated,
-        image: photo ? photo.path : product.image,
     });
 });
-
 const deleteProduct = asyncHandler(async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) {
         throw new AppError("Product not found", 404);
     }
-    if (product.image)
-        rm(product.image, () => {
-            console.log("image deleted successfully");
-        });
+
+    if (product.image && product.image.length > 0) {
+        const success = await deleteImages(product.image);
+        if (!success) {
+            throw new AppError("Error deleting images from cloudinary", 500);
+        }
+    }
+
     await product.deleteOne();
 
     invalidateCache({
@@ -211,7 +269,6 @@ const deleteProduct = asyncHandler(async (req, res) => {
         message: "Product deleted successfully",
     });
 });
-
 const getAllSearchProducts = asyncHandler(async (req, res) => {
     const { search, price, category, sort } = req.query;
     const page = Number(req.query.page) || 1;
@@ -259,15 +316,179 @@ const getAllSearchProducts = asyncHandler(async (req, res) => {
         },
     });
 });
+const postReview = asyncHandler(async (req, res) => {
+    const { rating, comment } = req.body;
+    const userId = req.query?.id;
+    const productId = req.query?.productId;
+
+    if (![rating, comment, productId, userId].every(Boolean)) {
+        throw new AppError(
+            "Please provide rating, comment, productId — and be logged in.",
+            400
+        );
+    }
+
+    const parsedRating = Number(rating);
+    if (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+        throw new AppError("Rating must be an integer between 1 and 5", 400);
+    }
+
+    const [userExists, productExists] = await Promise.all([
+        User.exists({ _id: userId }),
+        Product.findOne({ _id: productId }),
+    ]);
+    if (!userExists) throw new AppError("User not found", 404);
+    if (!productExists) throw new AppError("Product not found", 404);
+
+    const existingReview = await Review.findOne({
+        user: userId,
+        product: productId,
+    });
+    if (existingReview) {
+        existingReview.rating = parsedRating;
+        existingReview.comment = comment;
+        await existingReview.save();
+
+        const reviews = await Review.find({ product: productId });
+        const averageRating =
+            reviews.reduce((acc, review) => acc + review.rating, 0) /
+            (reviews.length || 1);
+        productExists.ratings = averageRating.toFixed(1);
+        productExists.numOfReviews = reviews.length;
+        await productExists.save();
+
+        invalidateCache({ product: true, admin: true });
+        return res
+            .status(200)
+            .json({ success: true, message: "Review updated successfully" });
+    }
+
+    await Review.create({
+        user: userId,
+        product: productId,
+        rating: parsedRating,
+        comment,
+    });
+
+    const reviews = await Review.find({ product: productId });
+    const averageRating =
+        reviews.reduce((acc, review) => acc + review.rating, 0) /
+        (reviews.length || 1);
+    productExists.ratings = averageRating.toFixed(1);
+    productExists.numOfReviews = reviews.length;
+    await productExists.save();
+
+    invalidateCache({ product: true, admin: true });
+    res
+        .status(201)
+        .json({ success: true, message: "Review created successfully" });
+});
+const getUserReviews = asyncHandler(async (req, res) => {
+    const product = req.query?.id;
+
+    if (!product) {
+        throw new AppError("Product ID is required", 400);
+    }
+
+    const reviews = await Review.find({ product }).sort({ createdAt: -1 });
+
+    if (!reviews || reviews.length === 0) {
+        return res
+            .status(200)
+            .json({ success: true, message: "No reviews found for this product" });
+    }
+
+    const productReviews = await Promise.all(
+        reviews.map(async (review) => {
+            const user = await User.findById(review.user).select("username photo");
+
+            return {
+                _id: review._id,
+                user: user ? user : null,
+                rating: review.rating,
+                comment: review.comment,
+                createdAt: review.createdAt,
+            };
+        })
+    );
+
+    res.status(200).json({ success: true, reviews: productReviews });
+});
+const getTopAllReviews = asyncHandler(async (req, res) => {
+
+    const reviews = await Review.find().sort({ createdAt: -1 }).limit(3);
+
+    if (!reviews || reviews.length === 0) {
+        return res
+            .status(200)
+            .json({ success: true, message: "No reviews found for this product" });
+    }
+
+    const topReviews = await Promise.all(
+        reviews.map(async (review) => {
+            const user = await User.findById(review.user).select("username photo");
+
+            return {
+                _id: review._id,
+                user: user ? user : null,
+                rating: review.rating,
+                comment: review.comment,
+                createdAt: review.createdAt,
+            };
+        })
+    );
+
+    res.status(200).json({ success: true, reviews: topReviews });
+});
+const deleteReview = asyncHandler(async (req, res) => {
+    const { id: reviewId } = req.params;
+    const userId = req.query?.authorId;
+
+    if (!userId) {
+        throw new AppError("User ID is required", 400);
+    }
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+        throw new AppError("Review not found", 404);
+    }
+
+    if (review.user.toString() !== userId) {
+        throw new AppError("You can only delete your own reviews", 403);
+    }
+
+    await review.deleteOne();
+
+    const product = await Product.findById(review.product);
+    if (!product) {
+        throw new AppError("Product not found", 404);
+    }
+    const reviews = await Review.find({ product: product._id });
+    const averageRating =
+        reviews.reduce((acc, review) => acc + review.rating, 0) /
+        (reviews.length || 1);
+    product.ratings = averageRating.toFixed(1);
+    product.numOfReviews = reviews.length;
+    await product.save();
+
+    invalidateCache({ product: true, admin: true });
+    res
+        .status(200)
+        .json({ success: true, message: "Review deleted successfully" });
+});
 
 export {
     createProduct,
     getLatestProduct,
     getCategory,
     getAllProducts,
-    getAllProduct,
+    getAllAdminProducts,
     getSingleProduct,
     deleteProduct,
     updateProduct,
     getAllSearchProducts,
+    postReview,
+    getUserReviews,
+    deleteReview,
+    getTopAllReviews
 };

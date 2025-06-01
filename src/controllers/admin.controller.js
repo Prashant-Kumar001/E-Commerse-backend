@@ -1,7 +1,6 @@
 import { asyncHandler } from "../middlewares/error.js";
 import AppError from "../utils/appError.js";
-import { cache } from "../../index.js";
-
+import { radis } from "../../index.js";
 import {
     calculateGrowthRate,
     getDateRanges,
@@ -12,13 +11,16 @@ import {
 import product from "../models/product.js";
 import User from "../models/user.model.js";
 import Order from "../models/order.model.js";
+import { REDIS_TTL } from "../utils/constants.js";
 
 export const getDashboardStats = asyncHandler(async (req, res) => {
 
 
-    let stats = cache.has("admin-stats")
-        ? JSON.parse(cache.get("admin-stats"))
-        : null;
+
+    let stats;
+    stats = await radis.get("admin-stats");
+
+
 
     if (!stats) {
         const { currentMonth, previousMonth, lastSixMonths } = getDateRanges();
@@ -135,8 +137,6 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
                 .limit(5)
                 .select("totalPrice orderItems discount status"),
         ]);
-
-
         const currentMonthProductData = currentMonthProductStats[0] || {
             totalValue: 0,
             totalCount: 0,
@@ -153,9 +153,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
             revenue: 0,
             totalOrders: 0,
         };
-
         const lifetimeRevenueData = lifetimeRevenue[0] || { totalRevenue: 0 };
-
         const sixMonthRevenueTrend = lastSixMonths.map((range) => {
             const monthData = lastSixMonthsOrderStats.find(
                 (stat) =>
@@ -168,7 +166,6 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
                 revenue: monthData ? monthData.revenue : 0,
             };
         });
-
         const sixMonthOrderTrend = lastSixMonths.map((range) => {
             const monthData = lastSixMonthsOrderStats.find(
                 (stat) =>
@@ -181,8 +178,6 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
                 orderCount: monthData ? monthData.totalOrders : 0,
             };
         });
-
-
         const LatestFiveTransactions = firstFiveTransactions.map((item) => {
             return {
                 _id: item._id,
@@ -195,10 +190,6 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
                 ),
             };
         }).sort((a, b) => b.totalPrice - a.totalPrice);
-
-
-
-
         stats = {
             currentMonth: {
                 newProducts: {
@@ -271,7 +262,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
                     previousMonthOrderData.revenue,
                     "revenue"
                 ),
-                
+
             },
             growthRate: {
                 products: calculatePercentage(
@@ -287,15 +278,15 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
                     previousMonthOrderData.totalOrders,
                 ),
                 revenue: calculatePercentage(
-                    currentMonthOrderData.revenue, 
+                    currentMonthOrderData.revenue,
                     previousMonthOrderData.revenue,
                 ),
             },
         };
-
-        cache.set("admin-stats", JSON.stringify(stats), 3600);
+        await radis.setex("admin-stats", 14400, JSON.stringify(stats));
+    } else {
+        stats = JSON.parse(stats);
     }
-
     res.status(200).json({
         success: true,
         stats,
@@ -303,9 +294,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
 });
 
 export const getBarChat = asyncHandler(async (req, res) => {
-    let chart = cache.has("admin-bar-chart")
-        ? JSON.parse(cache.get("admin-bar-chart"))
-        : null;
+    let chart;
+    chart = await radis.get("admin-bar-chart");
 
     if (!chart) {
         const { lastSixMonths } = getDateRanges();
@@ -460,7 +450,9 @@ export const getBarChat = asyncHandler(async (req, res) => {
             twelveMonthOrders,
         };
 
-        cache.set("admin-bar-chart", JSON.stringify(chart), 3600);
+        await radis.set("admin-bar-chart", JSON.stringify(chart));
+    } else {
+        chart = JSON.parse(chart);
     }
 
     res.status(200).json({
@@ -470,9 +462,8 @@ export const getBarChat = asyncHandler(async (req, res) => {
 });
 
 export const getPaiChat = asyncHandler(async (req, res) => {
-    let chart = cache.has("admin-pie-chart")
-        ? JSON.parse(cache.get("admin-pie-chart"))
-        : null;
+    let chart;
+    chart = await radis.get("admin-pie-chart");
 
     if (!chart) {
         const [
@@ -569,7 +560,9 @@ export const getPaiChat = asyncHandler(async (req, res) => {
         };
 
 
-        cache.set("admin-pie-chart", JSON.stringify(chart), 3600);
+        await radis.set("admin-pie-chart", JSON.stringify(chart));
+    } else {
+        chart = JSON.parse(chart);
     }
     res.status(200).json({
         success: true,
@@ -578,9 +571,7 @@ export const getPaiChat = asyncHandler(async (req, res) => {
 });
 
 export const getLineChart = asyncHandler(async (req, res) => {
-    let chart = cache.has("admin-line-chart")
-        ? JSON.parse(cache.get("admin-line-chart"))
-        : null;
+    let chart = await radis.get("admin-line-chart");
 
     if (!chart) {
         const lastTwelveMonths = getLastMonth(12);
@@ -738,7 +729,9 @@ export const getLineChart = asyncHandler(async (req, res) => {
             revenue
         };
 
-        cache.set("admin-line-chart", JSON.stringify(chart), 3600);
+        await radis.set("admin-line-chart", JSON.stringify(chart));
+    }else {
+        chart = JSON.parse(chart);
     }
 
     res.status(200).json({ success: true, chart });

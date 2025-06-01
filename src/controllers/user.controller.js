@@ -6,7 +6,6 @@ import { message, status } from "../utils/constants.js";
 const newUser = asyncHandler(async (req, res) => {
   const { email, id, username, gender, dob, photo } = req.body;
 
-
   const userExists = await User.findById(id);
 
   if (userExists) {
@@ -31,16 +30,33 @@ const newUser = asyncHandler(async (req, res) => {
     res.status(201).json({
       success: true,
       message: message.USER_CREATED,
-      user: user.username,
+      user: user,
     });
   }
 });
 
 const allUsers = asyncHandler(async (req, res) => {
   const users = await User.find();
+
+
+
+  const transformUserData = users.map((u) => {
+    return {
+      id: u.id,
+      username: u.username,
+      age: u.age,
+      dob: u.dob,
+      gender: u.gender,
+      role: u.role,
+      status: u.isActive,
+      photo: u.photo,
+      email: u.email,
+    };
+  });
+
   res.status(200).json({
     success: true,
-    users,
+    users: transformUserData,
   });
 });
 

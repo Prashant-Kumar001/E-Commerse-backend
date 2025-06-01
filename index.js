@@ -1,5 +1,4 @@
 import express from 'express';
-import nodeCash from 'node-cache';
 import morgan from 'morgan';
 import cors from 'cors';
 import { globalErrorHandler } from './src/middlewares/error.js';
@@ -12,15 +11,30 @@ import adminRoutes from './src/routes/admin.route.js';
 import { PORT, NODE_ENV, STRIPE_KEY } from "./src/utils/constants.js";
 import connectDB from './src/config/db.js';
 import Stripe from 'stripe';
+import { v2 as cloudinary } from 'cloudinary';
+import { connectRedis } from './src/utils/features.js';
 
 
 
 connectDB();
+export const radis = await connectRedis(process.env.REDIS_URL);
+
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export const stripe = new Stripe(STRIPE_KEY)
-export const cache = new nodeCash();
+
+
 const corsOptions = {
-  origin: process.env.CLIENT_URL || "https://test-khaki-alpha-44.vercel.app",
+  origin: [
+    process.env.CLIENT_URL,
+    'http://localhost:4173',
+    'http://localhost:5174',
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -38,6 +52,12 @@ app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 
 
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'Welcome to the E-commerce API',
+  });
+});
 
 
 app.use('/api/v1/user', userRoutes);
